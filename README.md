@@ -25,3 +25,6 @@ Levanta el docker con docker compose up --build
 Aplica las migraciones docker compose exec web python manage.py migrate
 Crea un superusuarios docker compose exec web python manage.py createsuperuser
 Y entra a Aplicación principal: http://localhost:8500/
+
+<img width="921" height="518" alt="image" src="https://github.com/user-attachments/assets/481f6c79-820e-4ca3-a70f-4aaf70d13f6f" />
+
