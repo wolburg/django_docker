@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% load socialaccount %}  {# 👈 1. necesario para provider_login_url #}
+
+{% block content %}
+<div class="max-w-md mx-auto mt-10 bg-white shadow p-6 rounded">
+    <h2 class="text-2xl font-bold mb-4">Crear cuenta</h2>
+
+    {% if messages %}
+        <ul class="mb-4">
+            {% for message in messages %}
+                <li class="text-sm text-blue-600">{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
+    <form method="post" class="space-y-2">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit"
+                class="mt-2 w-full bg-blue-600 text-white py-2 rounded">
+            Registrarse
+        </button>
+    </form>
+
+    {# 👇 2. Bloque para mostrar el botón de Google si está configurado #}
+    {% if google_provider_enabled %}
+        <div class="mt-6 border-t pt-4">
+            <p class="text-center text-sm text-gray-500 mb-2">
+                O continúa con
+            </p>
+            <a href="{% provider_login_url 'google' %}"
+               class="flex items-center justify-center gap-2 border rounded px-4 py-2 hover:bg-gray-100 w-full">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                     alt="Google" class="w-5 h-5" />
+                <span>Google</span>
+            </a>
+        </div>
+    {% endif %}
+
+    <p class="mt-4 text-sm text-center">
+        ¿Ya tienes cuenta?
+        <a href="{% url 'login' %}" class="text-blue-600 underline">
+            Inicia sesión aquí
+        </a>
+    </p>
+</div>
+{% endblock %}

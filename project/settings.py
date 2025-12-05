@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,18 +21,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-q7)*ao3lmw1!w-y6team+89(1+e$ly-^dcyp)&z4ac9eor3%57'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-q7)*ao3lmw1!w-y6team+89(1+e$ly-^dcyp)&z4ac9eor3%57')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',') if os.getenv('ALLOWED_HOSTS') else ['*']
 
 
 # Application definition
 
 INSTALLED_APPS = [
-    'polls.apps.PollsConfig',
     'lms.apps.LmsConfig',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -42,16 +42,23 @@ INSTALLED_APPS = [
     'rest_framework',
     'django_filters',
     'drf_yasg',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'allauth.socialaccount',
+    'allauth.socialaccount.providers.google',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',  # Add whitenoise for static files
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'project.urls'
@@ -59,13 +66,14 @@ ROOT_URLCONF = 'project.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        "DIRS": [BASE_DIR / "lms/templates/"],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'lms.context_processors.google_provider_enabled',
             ],
         },
     },
@@ -77,15 +85,31 @@ WSGI_APPLICATION = 'project.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'mydatabase',
-        'USER': 'user',
-        'PASSWORD': 'password',
-        'HOST': 'db',
+# Database configuration - use environment variables for production
+# For testing during Docker build, use SQLite if TEST_DATABASE_ENGINE is set
+if os.getenv('TEST_DATABASE_ENGINE'):
+    DATABASES = {
+        'default': {
+            'ENGINE': os.getenv('TEST_DATABASE_ENGINE', 'django.db.backends.sqlite3'),
+            'NAME': os.getenv('TEST_DATABASE_NAME', ':memory:'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DATABASE_NAME', 'mydatabase'),
+            'USER': os.getenv('DATABASE_USER', 'user'),
+            'PASSWORD': os.getenv('DATABASE_PASSWORD', 'password'),
+            'HOST': os.getenv('DATABASE_HOST', 'db'),
+            'PORT': os.getenv('DATABASE_PORT', '5432'),
+        }
+    }
+    
+    # Railway provides DATABASE_URL, parse it if available
+    if 'DATABASE_URL' in os.environ:
+        import dj_database_url
+        DATABASES['default'] = dj_database_url.config(conn_max_age=600, conn_health_checks=True)
 
 
 # Password validation
@@ -122,7 +146,24 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
+
+# Use Railway volume for static files if VOLUME_PATH is set, otherwise use local directory
+VOLUME_PATH = os.getenv('VOLUME_PATH', '')
+if VOLUME_PATH:
+    # Railway volume mounted at /staticfiles
+    STATIC_ROOT = Path(VOLUME_PATH) / 'static'
+    MEDIA_ROOT = Path(VOLUME_PATH) / 'media'
+else:
+    # Local development
+    STATIC_ROOT = BASE_DIR / 'staticfiles'
+    MEDIA_ROOT = BASE_DIR / 'media'
+
+# WhiteNoise configuration for static files
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+
+# Media files (User uploaded files)
+MEDIA_URL = '/media/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
@@ -179,4 +220,19 @@ SWAGGER_SETTINGS = {
 }
 
 # drf-yasg settings
-SWAGGER_SCHEMA_URL = 'http://localhost:8500'
+SWAGGER_SCHEMA_URL = os.getenv('SWAGGER_SCHEMA_URL', 'http://localhost:8500')
+
+LOGIN_REDIRECT_URL = "/"
+
+# Required by django.contrib.sites
+SITE_ID = 1
+
+# Email
+EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+DEFAULT_FROM_EMAIL = EMAIL_BACKEND
+

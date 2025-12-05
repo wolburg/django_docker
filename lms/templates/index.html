@@ -1,15 +1,23 @@
-<!DOCTYPE html>
-<html lang="en">
+{% extends "base.html" %}
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LMS HOMEPAGE</title>
-</head>
+{% block title %} Home {% endblock %}
 
-<body>
-    <h1>Welcome to the Learning Management System (LMS)</h1>
-    <p>This is the homepage of the LMS application.</p>
-</body>
+{% block content %}
+<div class="max-w-6xl mx-auto p-6 bg-white shadow-sm rounded-xl border border-gray-100">
 
-</html>
+    <div class="mb-6">
+        <h2 class="text-3xl font-bold text-gray-800">Cursos Disponibles</h2>
+        <p class="text-gray-500">Explora contenido diseñado para tu crecimiento</p>
+    </div>
+
+    {% if courses and courses|length > 0 %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {% for course in courses %}
+            {% include "partials/course_card.html" with course=course %}
+        {% endfor %}
+    </div>
+    {% else %}
+        <p class="text-gray-600 italic">No hay cursos disponibles.</p>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto py-10">
+  <div class="grid md:grid-cols-3 gap-8">
+    <!-- Columna principal -->
+    <div class="md:col-span-2">
+      <h1 class="text-3xl font-bold mb-2">{{ course.title }}</h1>
+
+      <p class="text-sm text-gray-500 mb-4">
+        Instructor:
+        <span class="font-medium">
+          {{ course.instructor.get_full_name|default:course.instructor.username }}
+        </span>
+        · Nivel: {{ course.get_difficulty_display }}
+        · Duración: {{ course.duration_hours }} horas
+      </p>
+
+      {% if course.thumbnail %}
+        <img src="{{ course.thumbnail.url }}" alt="{{ course.title }}"
+             class="w-full rounded mb-4">
+      {% endif %}
+
+      <p class="mb-4 text-gray-800">
+        {{ course.description }}
+      </p>
+
+      {% if course.learning_objectives %}
+        <h2 class="text-xl font-semibold mt-6 mb-2">Lo que aprenderás</h2>
+        <p class="text-gray-700 whitespace-pre-line">
+          {{ course.learning_objectives }}
+        </p>
+      {% endif %}
+
+      {% if course.prerequisites %}
+        <h2 class="text-xl font-semibold mt-6 mb-2">Requisitos</h2>
+        <p class="text-gray-700 whitespace-pre-line">
+          {{ course.prerequisites }}
+        </p>
+      {% endif %}
+    </div>
+
+    <!-- Columna lateral: tarjeta -->
+    <div>
+      <div class="border rounded-lg p-4 shadow-sm">
+        <p class="text-2xl font-bold mb-1">
+          {% if course.price and course.price > 0 %}
+            ${{ course.price }}
+          {% else %}
+            Gratis
+          {% endif %}
+        </p>
+        <p class="text-xs text-gray-500 mb-4">
+          Estado: {{ course.get_status_display }}
+        </p>
+
+        {% if is_enrolled %}
+          <p class="text-green-600 font-medium mb-2">
+            Ya estás inscrito en este curso ✅
+          </p>
+        {% else %}
+          <form method="post" action="{% url 'enroll_course' course.id %}">
+            {% csrf_token %}
+            <button
+              type="submit"
+              class="w-full bg-blue-600 text-white py-2 rounded-md hover:bg-blue-700 transition">
+              Inscribirme ahora
+            </button>
+          </form>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Lista de lecciones -->
+  <div class="mt-10">
+    <h2 class="text-2xl font-semibold mb-4">Contenido del curso</h2>
+
+    {% if lessons %}
+      <ol class="space-y-2">
+        {% for lesson in lessons %}
+          <li class="border rounded p-3 flex justify-between items-center">
+            <div>
+              <p class="font-medium">
+                {{ forloop.counter }}. {{ lesson.title }}
+              </p>
+              {% if lesson.duration_minutes %}
+                <p class="text-xs text-gray-500">
+                  {{ lesson.duration_minutes }} min · {{ lesson.get_lesson_type_display }}
+                </p>
+              {% endif %}
+            </div>
+            {% if lesson.is_free %}
+              <span class="text-xs px-2 py-1 rounded bg-green-100 text-green-700">
+                Vista previa gratis
+              </span>
+            {% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="text-gray-500">Aún no hay lecciones cargadas para este curso.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

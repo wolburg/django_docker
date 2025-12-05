@@ -1,11 +1,17 @@
+from django.shortcuts import get_object_or_404, redirect
 from rest_framework import viewsets, permissions
 from rest_framework.permissions import IsAuthenticated, IsAuthenticatedOrReadOnly
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.contrib.auth import authenticate, login as auth_login
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
+from django.shortcuts import render, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from .forms import RegistroForm
+from django.http import JsonResponse
 
 from .models import (
     Profile, Category, Course, Lesson, Enrollment,
@@ -17,8 +23,93 @@ from .serializers import (
 )
 
 
+def registro(request):
+    if request.method == 'POST':
+        form = RegistroForm(request.POST)
+        if form.is_valid():
+            user = form.save(commit=False)
+            user.set_password(form.cleaned_data['password'])
+            user.is_active = False
+            user.save()
+            messages.success(
+                request, 'Registro exitoso, revisa tu correo para activar.')
+            return redirect('login')
+    else:
+        form = RegistroForm()
+    return render(request, 'usuarios/registro.html', {'form': form})
+
+
+def iniciar_sesion(request):
+    # Detect whether a Google SocialApp is configured for allauth so the
+    # template can safely show/hide the provider login link.
+    google_provider_enabled = False
+    try:
+        from allauth.socialaccount.models import SocialApp
+        google_provider_enabled = SocialApp.objects.filter(
+            provider='google').exists()
+    except Exception:
+        # allauth may not be available or DB may not have SocialApp entries.
+        google_provider_enabled = False
+
+    if request.method == 'POST':
+        username = request.POST['username']
+        password = request.POST['password']
+        user = authenticate(request, username=username, password=password)
+        if user is not None:
+            login(request, user)
+            return redirect('perfil')
+        else:
+            messages.error(request, 'Credenciales incorrectas')
+            # Redirect to home so the base template (which contains the login modal)
+            # will render the messages and our JS will keep the modal open.
+            return redirect('home')
+    return render(request, 'usuarios/login.html', {'google_provider_enabled': google_provider_enabled})
+
+
+@login_required
+def perfil(request):
+    return render(request, 'usuarios/perfil.html')
+
+
+def cerrar_sesion(request):
+    logout(request)
+    return redirect('home')
+
+
 def index(request):
-    return render(request, 'index.html')
+    courses = Course.objects.filter(status='published').order_by('-created_at')[:20]
+
+    enrolled_ids = []
+    if request.user.is_authenticated:
+        enrolled_ids = list(
+            Enrollment.objects.filter(student=request.user)
+                              .values_list('course_id', flat=True)
+        )
+
+    return render(request, 'index.html', {
+        'courses': courses,
+        'enrolled_ids': enrolled_ids
+    })
+
+
+@login_required
+def enroll_course(request, course_id):
+    """Enroll the current user in a course"""
+    course = get_object_or_404(Course, id=course_id, status='published')
+    
+    # Check if user is already enrolled
+    enrollment, created = Enrollment.objects.get_or_create(
+        student=request.user,
+        course=course,
+        defaults={'status': 'active'}
+    )
+    
+    if created:
+        messages.success(request, f'Te has inscrito exitosamente en {course.title}')
+    else:
+        messages.info(request, f'Ya estabas inscrito en {course.title}')
+    
+    return redirect('home')
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -45,11 +136,30 @@ class ProfileViewSet(viewsets.ModelViewSet):
     ordering = ['-created_at']
 
 
-class CategoryViewSet(viewsets.ReadOnlyModelViewSet):
-    """Categorias para los cursos ofrecidos (read-only)"""
+class CategoryViewSet(viewsets.ModelViewSet):
+    """Categorias para los cursos ofrecidos"""
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+    # Allow read-only access to anonymous users, but require authentication
+    # for create/update/delete operations. We implement get_permissions so
+    # it's explicit per-action and also guard destroy to ensure anonymous
+    # delete attempts return 403.
     permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_permissions(self):
+        # For write actions, require full authentication.
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            perms = [IsAuthenticated]
+        else:
+            perms = [IsAuthenticatedOrReadOnly]
+        return [p() for p in perms]
+
+    def destroy(self, request, *args, **kwargs):
+        # Extra guard: explicitly forbid anonymous delete attempts with 403.
+        if not request.user or not request.user.is_authenticated:
+            from rest_framework.response import Response
+            return Response(status=403)
+        return super().destroy(request, *args, **kwargs)
     filter_backends = [SearchFilter, OrderingFilter]
     search_fields = ['name']
     ordering_fields = ['name']
@@ -126,3 +236,57 @@ class LessonProgressViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(student=self.request.user)
+
+
+def activate_account(request, user_id):
+    user = get_object_or_404(User, pk=user_id)
+    user.is_active = True
+    user.save()
+    return redirect('login')
+
+
+def list_courses_ajax(request):
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest' and request.method == 'GET':
+        courses = list(Course.objects.all().values(
+            'id', 'title', 'description'))
+        return JsonResponse({'courses': courses})
+    return JsonResponse({'error': 'bad request'}, status=400)
+
+def course_detail_page(request, course_id):
+    """
+    Ficha de detalles de curso:
+    muestra título, descripción, instructor, duración, lecciones, etc.
+    """
+    course = get_object_or_404(Course, id=course_id, status='published')
+
+    lessons = course.lessons.order_by('order')
+
+    is_enrolled = False
+    if request.user.is_authenticated:
+        is_enrolled = Enrollment.objects.filter(
+            student=request.user,
+            course=course
+        ).exists()
+
+    context = {
+        'course': course,
+        'lessons': lessons,
+        'is_enrolled': is_enrolled,
+    }
+    return render(request, 'courses/detail.html', context)
+
+@login_required
+def my_courses(request):
+    """
+    Lista de cursos en los que el usuario actual está inscrito.
+    """
+    enrollments = (
+        Enrollment.objects
+        .filter(student=request.user, status__in=['active', 'completed'])
+        .select_related('course')
+        .order_by('-enrolled_at')
+    )
+
+    return render(request, 'courses/my_courses.html', {
+        'enrollments': enrollments,
+    })

@@ -1,0 +1,40 @@
+<nav class="bg-gray-800 text-white p-4 flex justify-between items-center">
+    <a href="{% url 'home' %}" class="text-xl font-bold hover:text-gray-300">
+        MiLMS
+    </a>
+
+    <div class="flex items-center gap-4">
+        <a href="{% url 'home' %}" 
+           class="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded transition">
+            Inicio
+        </a>
+
+        {% if user.is_authenticated %}
+            <a href="{% url 'my_courses' %}"
+               class="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded transition">
+                Mis cursos
+            </a>
+
+            <div class="flex items-center gap-3">
+                <div class="flex items-center gap-2">
+                    {% if user.profile.avatar %}
+                        <img src="{{ user.profile.avatar.url }}" alt="avatar"
+                             class="w-8 h-8 rounded-full object-cover" />
+                    {% else %}
+                        <div class="w-8 h-8 rounded-full bg-gray-500 flex items-center justify-center text-sm font-semibold">
+                            {{ user.username|slice:":1"|upper }}
+                        </div>
+                    {% endif %}
+                    <span>{{ user.username }}</span>
+                </div>
+                <a href="{% url 'logout' %}" class="bg-red-600 px-3 py-1 rounded text-white">
+                    Cerrar sesión
+                </a>
+            </div>
+        {% else %}
+            <button class="bg-blue-500 px-4 py-2 rounded" onclick="openModal()">
+                Iniciar Sesión
+            </button>
+        {% endif %}
+    </div>
+</nav>
